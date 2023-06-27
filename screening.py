@@ -1,5 +1,6 @@
 import cv2
 from app import plate_utils
+from app import save_image
 import glob
 import os
 
@@ -21,7 +22,7 @@ for path in paths:
             ""
         )
 
-    cv2.imwrite(
+    if save_image: cv2.imwrite(
             "./image/res_path_park_v2/{idx} {res} {plate}.jpeg".format(
                     idx=count,
                     res=plate_text,

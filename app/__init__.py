@@ -1,6 +1,7 @@
 from flask import Flask
 
 app = Flask(__name__)
+save_image = False
 
 from app import database
 from app import utils

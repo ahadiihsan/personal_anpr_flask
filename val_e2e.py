@@ -5,10 +5,11 @@ import glob
 import os
 from datetime import datetime
 import csv
+import time
 
 
 # Get all paths to your images files and text files
-PATH = '../datasets/'
+PATH = 'datasets/'
 
 paths = glob.glob(PATH+'validation/images/*')
 
@@ -27,6 +28,10 @@ with open('val_{dt}.csv'.format(dt=dt), 'w') as fp:
             'plate_text',
             'similarity_score'
         ])
+    
+    # Initialize fps variables
+    frame_count = 0
+    start_time = time.time()
 
     for path in paths:
         filename = os.path.splitext(os.path.basename(path))[0]
@@ -43,6 +48,8 @@ with open('val_{dt}.csv'.format(dt=dt), 'w') as fp:
 
         if ground_truth == plate_text:
             count += 1
+        
+        frame_count += 1
 
         # write a row to the csv file
         writer.writerow([
@@ -52,8 +59,19 @@ with open('val_{dt}.csv'.format(dt=dt), 'w') as fp:
                 utils.calculate_similarity(ground_truth, plate_text)
             ])
 
+    # Calculate elapsed time
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    
+    # Calculate FPS
+    fps = frame_count / elapsed_time
+    
+    print(f"FRAME COUNT: {frame_count}")
+    print(f"ELAPSED TIME: {elapsed_time}")
+    print(f"FPS: {fps:.2f}")
+
 print(
-    "YOUR SYSTEM IS SUCK AND ONLY CAN RECOGNIZE {count} plate".format(
+    "SUCCESSFULY RECOGNIZE {count} plate".format(
             count=count
         )
     )

@@ -10,6 +10,7 @@ from typing import Tuple, Union
 import math
 import imutils as im
 import Levenshtein
+from app import save_image
 
 # load denoiser model
 denoiser = load_model("./models/denoiser_ae2.h5")
@@ -88,7 +89,7 @@ def letterbox(
 
 def line_remover(plate):
     edges = cv2.Canny(plate, 50, 150, apertureSize=3)
-    cv2.imwrite("./image/img_canny.jpeg", edges)
+    if save_image: cv2.imwrite("./image/img_canny.jpeg", edges)
     height, width = edges.shape[:2]
     edges = edges[0: int(height/2), 0:width]
     minLineLength = 0
@@ -133,13 +134,13 @@ def maximizeContrast(imgGrayscale):
         )
 
     imgGrayscalePlusTopHat = cv2.add(imgGrayscale, imgTopHat)
-    cv2.imwrite(
+    if save_image: cv2.imwrite(
             "./image/img_imgGrayscalePlusTopHat.jpeg", imgGrayscalePlusTopHat
         )
     imgGrayscalePlusTopHatMinusBlackHat = cv2.subtract(
             imgGrayscalePlusTopHat, imgBlackHat
         )
-    cv2.imwrite(
+    if save_image: cv2.imwrite(
             "./image/img_imgGrayscalePlusTopHatMinusBlackHat.jpeg",
             imgGrayscalePlusTopHatMinusBlackHat
         )
@@ -204,30 +205,27 @@ def find_line(lines):
             if not (x2-x1 == 0 or y2-y1 == 0):
                 return [[x1, y1, x2, y2]]
             else:
-                print('added degree to line')
                 return [[x1, y1, x2, y2+0.5]]
 
 
 def rotate(image):
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    cv2.imwrite("./image/img_gray.jpeg", gray)
-    edges = cv2.Canny(gray, 50, 150)
-    cv2.imwrite("./image/img_canned.jpeg", edges)
+    edges = cv2.Canny(image, 50, 150)
+    if save_image: cv2.imwrite("./image/img_canned.jpeg", edges)
     lines = cv2.HoughLinesP(
             edges, 1, math.pi / 180.0, 100, minLineLength=100, maxLineGap=3
         )
-    # cv2.imwrite("./image/img_lines1.jpeg", lines)
+    # if save_image: cv2.imwrite("./image/img_lines1.jpeg", lines)
 
     if lines is None or is_horizontal(lines):
         lines = cv2.HoughLinesP(
                 edges, 1, np.pi/180, 70, minLineLength=70, maxLineGap=3
             )
-        # cv2.imwrite("./image/img_lines2.jpeg", lines)
+        # if save_image: cv2.imwrite("./image/img_lines2.jpeg", lines)
         if lines is None or is_horizontal(lines):
             lines = cv2.HoughLinesP(
                     edges, 1, np.pi/180, 50, minLineLength=40, maxLineGap=3
                 )
-            # cv2.imwrite("./image/img_lines3.jpeg", lines)
+            # if save_image: cv2.imwrite("./image/img_lines3.jpeg", lines)
 
     if lines is None:
         return image
@@ -334,7 +332,6 @@ def getContours(img, orig):  # Change - pass the original image too
     index = None
     for i, cnt in enumerate(contours):  # Change - also provide index
         area = cv2.contourArea(cnt)
-        print("area", area)
         if area > 3000:
             peri = cv2.arcLength(cnt, True)
             approx = cv2.approxPolyDP(cnt, 0.02*peri, True)
@@ -345,7 +342,6 @@ def getContours(img, orig):  # Change - pass the original image too
 
     warped = orig  # Stores the warped license plate image
     if index is not None:  # Draw the biggest contour on the image
-        print("transformed")
         cv2.drawContours(imgContour, contours, index, (255, 0, 0), 3)
 
         src = np.squeeze(biggest).astype(np.float32)  # Source points
