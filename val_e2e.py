@@ -18,7 +18,7 @@ results = []
 count = 0
 dt = datetime.now()
 
-with open('val_{dt}.csv'.format(dt=dt), 'w') as fp:
+with open('result/val_{dt}.csv'.format(dt=dt), 'w') as fp:
     # create the csv writer
     writer = csv.writer(fp)
     # header
