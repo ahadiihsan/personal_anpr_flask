@@ -21,7 +21,7 @@ model = YOLO('./models/best2.pt')
 recognizer = keras_ocr.recognition.Recognizer()
 ocr_model = recognizer.model.load_weights('./models/plat1.h5')
 reader1 = keras_ocr.pipeline.Pipeline(recognizer=ocr_model)
-reader2 = easyocr.Reader(['en'])
+reader2 = easyocr.Reader(['en'], gpu=True)
 
 
 def detect_plate(source_image):
@@ -53,7 +53,8 @@ def detect_plate(source_image):
                     ]
                 plate_detections.append(coords)
                 det_confidences.append(box.conf)
-
+                print(f"DET CONFIDENCE: {box.conf}")
+    
     return plate_detections, det_confidences
 
 
@@ -263,31 +264,13 @@ def get_best_ocr1(preds, rec_conf, ocr_res, track_id):
             break
     return preds, rec_conf, ocr_res
 
-
 def get_best_ocr2(preds, rec_conf, ocr_res, track_id):
-    avg_similarities = []
-
-    for result in preds:
-        total_similarity = 0
-        num_comparisons = 0
-        
-        for other_result in preds:
-            if result['ocr_txt'] != other_result['ocr_txt']:
-                similarity = utils.calculate_similarity(result['ocr_txt'], other_result['ocr_txt'])
-                total_similarity += similarity
-                num_comparisons += 1
-
-        if num_comparisons > 0:
-            avg_similaritiy = total_similarity / num_comparisons
-        else:
-            avg_similaritiy = 0
-
-        avg_similarities.append(avg_similaritiy)
-
-    max_similarity_index = avg_similarities.index(max(avg_similarities))
-    most_confident_result = preds[max_similarity_index]['ocr_txt']
-    
-    return preds, min(avg_similarities), most_confident_result
+    for info in preds:
+        # Check if it is current track id
+        if info['track_id'] == track_id:
+            info['ocr_conf'] = rec_conf
+            info['ocr_txt'] = ocr_res
+    return preds, rec_conf, ocr_res
 
 
 def plot_one_box(x, img, color=None, label=None, line_thickness=3):
@@ -436,9 +419,13 @@ def get_plates_from_video(source):
                     for i in range(len(bbox)):
                         if bbox[i] < 0:
                             bbox[i] = 0
-
+                    
+                    if bbox[0] < 100 or bbox[2] > 1200 or bbox[1] < 400 or bbox[3] > 600:
+                        print(f"CONTINUUUUUUUUUUUUUUUUUUUUUUUUU################################################: {bbox[0]}")
+                        continue
                     # Cropping the license plate and applying the OCR.
                     plate_image = extract_plate(frame, bbox)
+                    
                     to_ocr = recognition_preprocessing_2(plate_image)
                     plate_text, ocr_confidence = ocr_plate1(to_ocr)
                     if len(plate_text) <= 3:
@@ -484,6 +471,14 @@ def get_plates_from_video(source):
                     idx += 1
             
             frame_count += 1
+            
+            plot_one_box(
+                            [100,400,1200,600],
+                            frame,
+                            label="",
+                            color=[255, 150, 0],
+                            line_thickness=3
+                        )
 
             # Write the frame into the output file
             cv2.imshow("Output", frame)
