@@ -61,10 +61,10 @@ def detect_plate(source_image):
 def extract_plate(image, coord):
     h, w, c = image.shape
     # minus
-    x1 = int(coord[1])-10 if int(coord[1])-10 >= 0 else int(coord[1])
+    x1 = int(coord[1])-5 if int(coord[1])-5 >= 0 else int(coord[1])
     y1 = int(coord[0]) if int(coord[0]) >= 0 else int(coord[0])
     # plus
-    x2 = int(coord[3])+10 if int(coord[3])+10 <= w else int(coord[3])
+    x2 = int(coord[3])+5 if int(coord[3])+5 <= w else int(coord[3])
     y2 = int(coord[2]) if int(coord[2]) <= h else int(coord[2])
 
     cropped_image = image[
@@ -138,8 +138,8 @@ def recognition_preprocessing_2(input):
                             )
     if save_image: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
     
-    # plate_image = cv2.bitwise_not(plate_image)
-    # if save_image: cv2.imwrite("./image/img_not.jpeg", plate_image)
+    plate_image = cv2.bitwise_not(plate_image)
+    if save_image: cv2.imwrite("./image/img_not.jpeg", plate_image)
 
     return plate_image
 
