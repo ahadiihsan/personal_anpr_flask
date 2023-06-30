@@ -15,7 +15,7 @@ import Levenshtein
 from app import save_image
 
 # Load detection model
-model = YOLO('./models/best2.pt')
+model = YOLO('./result/train4/weights/best.pt')
 
 # load recognition model
 recognizer = keras_ocr.recognition.Recognizer()
@@ -60,9 +60,11 @@ def detect_plate(source_image):
 
 def extract_plate(image, coord):
     h, w, c = image.shape
-    x1 = int(coord[1])-5 if int(coord[1])-5 >= 0 else int(coord[1])
+    # minus
+    x1 = int(coord[1])-10 if int(coord[1])-10 >= 0 else int(coord[1])
     y1 = int(coord[0]) if int(coord[0]) >= 0 else int(coord[0])
-    x2 = int(coord[3])+5 if int(coord[3])+5 <= w else int(coord[3])
+    # plus
+    x2 = int(coord[3])+10 if int(coord[3])+10 <= w else int(coord[3])
     y2 = int(coord[2]) if int(coord[2]) <= h else int(coord[2])
 
     cropped_image = image[
@@ -135,9 +137,9 @@ def recognition_preprocessing_2(input):
                                 interpolation=cv2.INTER_CUBIC
                             )
     if save_image: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
-
-    plate_image = cv2.bitwise_not(plate_image)
-    if save_image: cv2.imwrite("./image/img_not.jpeg", plate_image)
+    
+    # plate_image = cv2.bitwise_not(plate_image)
+    # if save_image: cv2.imwrite("./image/img_not.jpeg", plate_image)
 
     return plate_image
 
@@ -201,11 +203,9 @@ def distinguish_rows(lst, thresh=15):
 
 
 def ocr_plate1(plate_image):
-    data = [plate_image]
-    temp = []
     result = ""
 
-    predict = reader1.recognize(data)
+    predict = reader1.recognize([plate_image])
 
     predictions = get_distance(predict[0])
     predictions = list(distinguish_rows(predictions, 10))
@@ -221,11 +221,8 @@ def ocr_plate1(plate_image):
         for each in row:
             ordered_preds.append(each['text'])
 
-    for dataq in ordered_preds[:3]:
-        temp.append(dataq.upper())
-
-    for word in temp:
-        result += word
+    for data in ordered_preds[:3]:
+        result += data.upper()
 
     print(f"OCR RESULT: {result}")
     return result, 0
@@ -313,6 +310,7 @@ def get_plates_from_image(input, filename=""):
 
     for coords in plate_detections:
         plate_image = extract_plate(input, coords)
+        
         to_ocr = recognition_preprocessing_2(plate_image)
         plate_text, ocr_confidence = ocr_plate1(to_ocr)
         if len(plate_text) <= 3:
@@ -380,8 +378,12 @@ def get_plates_from_video(source):
 
     # Initializing some helper variables.
     preds = []
-    total_obj = 0
     idx = 0
+    
+    # Initializing results variables
+    rows = []
+    save_count = 0
+    
     while (True):
         ret, frame = video.read()
         if ret:
@@ -420,18 +422,22 @@ def get_plates_from_video(source):
                         if bbox[i] < 0:
                             bbox[i] = 0
                     
-                    if bbox[0] < 100 or bbox[2] > 1200 or bbox[1] < 400 or bbox[3] > 600:
-                        print(f"CONTINUUUUUUUUUUUUUUUUUUUUUUUUU################################################: {bbox[0]}")
+                    # only consider bboxes that are on the detection range
+                    if bbox[0] < 100 or bbox[2] > 1200 or bbox[1] < 300 or bbox[3] > 500:
                         continue
+                    
                     # Cropping the license plate and applying the OCR.
                     plate_image = extract_plate(frame, bbox)
                     
+                    # recognize plate text
                     to_ocr = recognition_preprocessing_2(plate_image)
                     plate_text, ocr_confidence = ocr_plate1(to_ocr)
                     if len(plate_text) <= 3:
                         to_ocr = recognition_preprocessing_1(plate_image)
                         plate_text, ocr_confidence = ocr_plate1(to_ocr)
 
+                    if ocr_confidence == 0:
+                        ocr_confidence = scores[0].cpu().numpy()[0]
                     # Storing the ocr output for corresponding track id.
                     output_frame = {
                         'track_id': track.track_id,
@@ -446,15 +452,21 @@ def get_plates_from_video(source):
                     if track.track_id not in list(
                                 set(pred['track_id'] for pred in preds)
                             ):
-                        total_obj += 1
                         preds.append(output_frame)
+                        save_count = 0
                     else:
+                        save_count +=1
                         preds, ocr_confidence, plate_text = get_best_ocr2(
                                 preds,
                                 ocr_confidence,
                                 plate_text,
                                 track.track_id
                             )
+                    
+                    if save_count <= 5:
+                        row = [track.track_id, plate_text, ocr_confidence]
+                        rows.append(row)
+                    
                     # Plotting the prediction.
                     plot_one_box(
                             bbox,
@@ -473,7 +485,7 @@ def get_plates_from_video(source):
             frame_count += 1
             
             plot_one_box(
-                            [100,400,1200,600],
+                            [100,300,1200,500],
                             frame,
                             label="",
                             color=[255, 150, 0],
@@ -482,6 +494,7 @@ def get_plates_from_video(source):
 
             # Write the frame into the output file
             cv2.imshow("Output", frame)
+            
             # Break the loop if 'q' is pressed
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
@@ -503,5 +516,5 @@ def get_plates_from_video(source):
     print(f"ELAPSED TIME: {elapsed_time}")
     print(f"FPS: {fps:.2f}")
 
-    return
+    return rows
 

@@ -176,7 +176,7 @@ def shave(image, border):
 
 def image_enhancement(img):
     img = modcrop(img, 3)
-    # img = cv2.resize(img, dsize=(256, 80), interpolation=cv2.INTER_CUBIC)
+    img = cv2.resize(img, dsize=(256, 80), interpolation=cv2.INTER_CUBIC)
     temp = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
     Y = np.zeros((1, temp.shape[0], temp.shape[1], 1), dtype=float)
     Y[0, :, :, 0] = temp[:, :, 0].astype(float) / 255
@@ -187,9 +187,10 @@ def image_enhancement(img):
     pre[pre[:] < 0] = 0
     pre = pre.astype(np.uint8)
     temp = shave(temp, 6)
-    # temp = cv2.resize(temp, dsize=(256, 80), interpolation=cv2.INTER_CUBIC)
+    temp = cv2.resize(temp, dsize=(256, 80), interpolation=cv2.INTER_CUBIC)
     temp[:, :, 0] = pre[0, :, :, 0]
     output = cv2.cvtColor(temp, cv2.COLOR_YCrCb2BGR)
+    output = cv2.resize(output, dsize=(116, 60), interpolation=cv2.INTER_CUBIC)
 
     return output
 
