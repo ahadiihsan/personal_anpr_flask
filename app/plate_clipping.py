@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-from app import save_image
+from app import config
 
 
 def normalize_plate(points):
@@ -49,7 +49,7 @@ def image_threshold_hor(image):
 
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    if save_image: cv2.imwrite("./image/img_thres.jpeg", thresh)
+    if config["save_image"]: cv2.imwrite("./image/img_thres.jpeg", thresh)
 
     horizontal = thresh.sum(axis=0)
 

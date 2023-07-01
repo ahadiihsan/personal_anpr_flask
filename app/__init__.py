@@ -1,7 +1,12 @@
 from flask import Flask
 
 app = Flask(__name__)
-save_image = False
+config = {
+  "save_image": True,
+  "onnx": True,
+  "ocr": "easy",
+}
+
 
 from app import database
 from app import utils

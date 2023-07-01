@@ -12,67 +12,133 @@ from deep_sort_realtime.deepsort_tracker import DeepSort
 import time
 import easyocr
 import Levenshtein
-from app import save_image
+from app import config
+from matplotlib import pyplot as plt
+import onnxruntime
+from PIL import Image
+import pytesseract
 
 # Load detection model
-model = YOLO('./result/train4/weights/best.pt')
+if config["onnx"]:
+    opt_session = onnxruntime.SessionOptions()
+    opt_session.enable_mem_pattern = False
+    opt_session.enable_cpu_mem_arena = True
+    opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
+
+    model_path = 'result/train4/weights/best.onnx'
+    EP_list = ['CPUExecutionProvider']
+    CLASSES = [
+        'license_plate'
+    ]
+    ort_session = onnxruntime.InferenceSession(model_path, providers=EP_list)
+
+    model_inputs = ort_session.get_inputs()
+    input_names = [model_inputs[i].name for i in range(len(model_inputs))]
+    input_shape = model_inputs[0].shape
+    input_height, input_width = input_shape[2:]
+
+    model_output = ort_session.get_outputs()
+    output_names = [model_output[i].name for i in range(len(model_output))]
+else:
+    model = YOLO('./result/train4/weights/best.pt')
+
 
 # load recognition model
-recognizer = keras_ocr.recognition.Recognizer()
-ocr_model = recognizer.model.load_weights('./models/plat1.h5')
-reader1 = keras_ocr.pipeline.Pipeline(recognizer=ocr_model)
-reader2 = easyocr.Reader(['en'], gpu=True)
+if config["ocr"] == "tesseract":
+    pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/Cellar/tesseract/5.3.1_1/bin/tesseract'
+elif config["ocr"] == "keras":
+    recognizer = keras_ocr.recognition.Recognizer()
+    ocr_model = recognizer.model.load_weights('./models/plat1.h5')
+    reader1 = keras_ocr.pipeline.Pipeline(recognizer=ocr_model)
+else:
+    reader2 = easyocr.Reader(['en'], gpu=True)
 
 
 def detect_plate(source_image):
-    # with torch.no_grad():
-    # Inference
-    pred = model(
-            source_image,
-            augment=True,
-            iou=0.7,
-            half=True,
-            device='mps',
-            conf=0.7,
-            agnostic_nms=True,
-        )[0]
+    if config["onnx"]:
+        image_height, image_width = source_image.shape[:2]
+        image_rgb = cv2.cvtColor(source_image, cv2.COLOR_BGR2RGB)
+        resized = cv2.resize(image_rgb, (input_width, input_height))
 
-    plate_detections = []
-    det_confidences = []
+        # Scale input pixel value to 0 to 1
+        input_image = resized / 255.0
+        input_image = input_image.transpose(2,0,1)
+        input_tensor = input_image[np.newaxis, :, :, :].astype(np.float32)
 
-    # Process detections
-    for i, det in enumerate(pred):  # detections per image
-        if len(det):
-            # Return results
-            for box in det.boxes:
-                coords = [
-                        int(position) for position in (
-                            box.xyxy.clone().detach().view(1,4)
-                            # torch.tensor(box.xyxy).view(1, 4)
-                        ).tolist()[0]
-                    ]
-                plate_detections.append(coords)
-                det_confidences.append(box.conf)
-                print(f"DET CONFIDENCE: {box.conf}")
-    
-    return plate_detections, det_confidences
+        outputs = ort_session.run(output_names, {input_names[0]: input_tensor})[0]
+        predictions = np.squeeze(outputs).T
+        
+        conf_thresold = 0.7
+        # Filter out object confidence scores below threshold
+        scores = np.max(predictions[:, 4:], axis=1)
+        predictions = predictions[scores > conf_thresold, :]
+        scores = scores[scores > conf_thresold]
+        
+        # Get the class with the highest confidence
+        class_ids = np.argmax(predictions[:, 4:], axis=1)
+        
+        # Get bounding boxes for each object
+        boxes = predictions[:, :4]
+
+        #rescale box
+        input_shape = np.array([input_width, input_height, input_width, input_height])
+        boxes = np.divide(boxes, input_shape, dtype=np.float32)
+        boxes *= np.array([image_width, image_height, image_width, image_height])
+        boxes = boxes.astype(np.int32)
+        
+        indices = utils.nms(boxes, scores, 0.7)
+        
+        bbox = utils.xywh2xyxy(boxes[indices]).round().astype(np.int32)
+        return bbox, scores
+    else:
+        # with torch.no_grad():
+        # Inference
+        pred = model(
+                source_image,
+                augment=True,
+                iou=0.7,
+                half=True,
+                device='mps',
+                conf=0.7,
+                agnostic_nms=True,
+            )[0]
+
+        plate_detections = []
+        det_confidences = []
+
+        # Process detections
+        for i, det in enumerate(pred):  # detections per image
+            if len(det):
+                # Return results
+                for box in det.boxes:
+                    coords = [
+                            int(position) for position in (
+                                box.xyxy.clone().detach().view(1,4)
+                                # torch.tensor(box.xyxy).view(1, 4)
+                            ).tolist()[0]
+                        ]
+                    plate_detections.append(coords)
+                    det_confidences.append(box.conf)
+                    print(f"DET CONFIDENCE: {box.conf}")
+
+        return plate_detections, det_confidences
 
 
 def extract_plate(image, coord):
     h, w, c = image.shape
     # minus
     x1 = int(coord[1])-5 if int(coord[1])-5 >= 0 else int(coord[1])
-    y1 = int(coord[0]) if int(coord[0]) >= 0 else int(coord[0])
+    y1 = int(coord[0])-5 if int(coord[0])-5 >= 0 else int(coord[0])
     # plus
     x2 = int(coord[3])+5 if int(coord[3])+5 <= w else int(coord[3])
-    y2 = int(coord[2]) if int(coord[2]) <= h else int(coord[2])
+    y2 = int(coord[2])+5 if int(coord[2])+5 <= h else int(coord[2])
 
     cropped_image = image[
             x1:x2,
             y1:y2
         ]
 
-    if save_image: cv2.imwrite("./image/img_cropped.jpeg", cropped_image)
+    if config["save_image"]: cv2.imwrite("./image/img_cropped.jpeg", cropped_image)
 
     return cropped_image
 
@@ -82,13 +148,13 @@ def recognition_preprocessing_1(input):
     plate_image = input
 
     plate_image = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
-    if save_image: cv2.imwrite("./image/warp/imgGray.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite("./image/img_grayscaled.jpeg", plate_image)
     
     plate_image = utils.rotate(plate_image)
-    if save_image: cv2.imwrite("./image/img_rotated.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite("./image/img_rotated.jpeg", plate_image)
 
     plate_image = utils.maximizeContrast(plate_image)
-    if save_image: cv2.imwrite("./image/img_contrast.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite("./image/img_contrast.jpeg", plate_image)
     
     plate_image = cv2.cvtColor(plate_image, cv2.COLOR_GRAY2BGR)
     cv2.imwrite("./image/img_color.jpeg", plate_image)
@@ -100,7 +166,7 @@ def recognition_preprocessing_1(input):
                                 fy=1,
                                 interpolation=cv2.INTER_CUBIC
                             )
-    if save_image: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
 
     return plate_image
 
@@ -111,21 +177,21 @@ def recognition_preprocessing_2(input):
     plate_image = input
 
     plate_image = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
-    if save_image: cv2.imwrite("./image/warp/imgGray.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite("./image/warp/imgGray.jpeg", plate_image)
 
-    imgCanny = cv2.Canny(plate_image, 50, 150)
-    if save_image: cv2.imwrite("./image/warp/imgCanny.jpeg", imgCanny)
+    imgCanny = cv2.Canny(plate_image, 150, 200)
+    if config["save_image"]: cv2.imwrite("./image/warp/imgCanny.jpeg", imgCanny)
 
     imgDilate = cv2.dilate(imgCanny, kernel, iterations=2)
-    if save_image: cv2.imwrite("./image/warp/imgDilate.jpeg", imgDilate)
+    if config["save_image"]: cv2.imwrite("./image/warp/imgDilate.jpeg", imgDilate)
 
     imgThres = cv2.erode(imgDilate, kernel, iterations=2)
-    if save_image: cv2.imwrite("./image/warp/imgThres.jpeg", imgThres)
+    if config["save_image"]: cv2.imwrite("./image/warp/imgThres.jpeg", imgThres)
 
     biggest, imgContour, warped = utils.getContours(imgThres, input)
 
-    if save_image: cv2.imwrite("./image/warp/imgContour.jpeg", imgContour)
-    if save_image: cv2.imwrite("./image/img_warped.jpeg", warped)
+    if config["save_image"]: cv2.imwrite("./image/warp/imgContour.jpeg", imgContour)
+    if config["save_image"]: cv2.imwrite("./image/img_warped.jpeg", warped)
 
     plate_image = warped
 
@@ -136,10 +202,21 @@ def recognition_preprocessing_2(input):
                                 fy=1,
                                 interpolation=cv2.INTER_CUBIC
                             )
-    if save_image: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
     
     plate_image = cv2.bitwise_not(plate_image)
-    if save_image: cv2.imwrite("./image/img_not.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite("./image/img_not.jpeg", plate_image)
+    
+    # titles = ['Original', 'Canny', 'Dilate', 'Threshold', 'Contours', 'Warped']  # Change - also show warped image
+    # images = [input[...,::-1], imgCanny, imgDilate, imgThres, imgContour, warped]  # Change
+
+    # # Change - Also show contour drawn image + warped image
+    # for i in range(6):
+    #     plt.subplot(3, 3, i+1)
+    #     plt.imshow(images[i], cmap='gray')
+    #     plt.title(titles[i])
+
+    # plt.show()
 
     return plate_image
 
@@ -206,6 +283,8 @@ def ocr_plate1(plate_image):
     result = ""
 
     predict = reader1.recognize([plate_image])
+    # fig, axs = plt.subplots(nrows=1, figsize=(20, 20))
+    # keras_ocr.tools.drawAnnotations(image=plate_image, predictions=predict[0], ax=axs)
 
     predictions = get_distance(predict[0])
     predictions = list(distinguish_rows(predictions, 10))
@@ -243,8 +322,38 @@ def ocr_plate2(plate_image):
 
     if confidence != 0:
         confidence = confidence/3
+    
+    res = result.replace(" ", "")
+    
+    print(f"OCR RESULT: {res}")
+    return res, confidence
 
-    return result.replace(" ", ""), confidence
+
+def ocr_plate3(plate_image):
+    # recognizing text
+    config = '-l eng --oem 1 --psm 7'
+    results = pytesseract.image_to_data(plate_image, config=config, output_type=pytesseract.Output.DICT)
+    all_text = ""
+    for i in range(0, len(results["text"])):
+        x = results["left"][i]
+        y = results["top"][i]
+        w = results["width"][i]
+        h = results["height"][i]
+        text = results["text"][i]
+        conf = int(results["conf"][i])
+        all_text += text
+
+    print(f"OCR RESULT: {all_text}")
+    return all_text, conf
+
+
+def ocr_plate(plate_image):
+    if config["ocr"] == "tesseract":
+        return ocr_plate3(plate_image)
+    elif config["ocr"] == "keras":
+        return ocr_plate1(plate_image)
+    else:
+        return ovr_plate2(plate_image)
 
 
 def get_best_ocr1(preds, rec_conf, ocr_res, track_id):
@@ -260,6 +369,7 @@ def get_best_ocr1(preds, rec_conf, ocr_res, track_id):
                 ocr_res = info['ocr_txt']
             break
     return preds, rec_conf, ocr_res
+
 
 def get_best_ocr2(preds, rec_conf, ocr_res, track_id):
     for info in preds:
@@ -312,10 +422,10 @@ def get_plates_from_image(input, filename=""):
         plate_image = extract_plate(input, coords)
         
         to_ocr = recognition_preprocessing_2(plate_image)
-        plate_text, ocr_confidence = ocr_plate1(to_ocr)
+        plate_text, ocr_confidence = ocr_plate(to_ocr)
         if len(plate_text) <= 3:
             to_ocr = recognition_preprocessing_1(plate_image)
-            plate_text, ocr_confidence = ocr_plate1(to_ocr)
+            plate_text, ocr_confidence = ocr_plate(to_ocr)
 
         plate_texts.append(plate_text)
         ocr_confidences.append(ocr_confidence)
@@ -334,7 +444,7 @@ def get_plates_from_image(input, filename=""):
             if not os.path.exists(path):
                 os.mkdir(path)
 
-            if save_image: cv2.imwrite(
+            if config["save_image"]: cv2.imwrite(
                 "{path}{idx}.jpeg".format(
                     path=path,
                     idx=filename.split("_")[1]
@@ -342,14 +452,14 @@ def get_plates_from_image(input, filename=""):
                 detected_image
             )
 
-            if save_image: cv2.imwrite(
+            if config["save_image"]: cv2.imwrite(
                 "{path}img_cropped_{plate}.jpeg".format(
                         path=path,
                         plate=plate_text
                     ),
                 plate_image
             )
-            if save_image: cv2.imwrite(
+            if config["save_image"]: cv2.imwrite(
                 "{path}img_to_ocr_{plate}.jpeg".format(
                         path=path,
                         plate=plate_text
@@ -357,7 +467,7 @@ def get_plates_from_image(input, filename=""):
                 to_ocr
             )
 
-        if save_image: cv2.imwrite("./image/img_recognized.jpeg", detected_image)
+        if config["save_image"]: cv2.imwrite("./image/img_recognized.jpeg", detected_image)
 
     return detected_image, plate_text
 
@@ -431,10 +541,10 @@ def get_plates_from_video(source):
                     
                     # recognize plate text
                     to_ocr = recognition_preprocessing_2(plate_image)
-                    plate_text, ocr_confidence = ocr_plate1(to_ocr)
+                    plate_text, ocr_confidence = ocr_plate(to_ocr)
                     if len(plate_text) <= 3:
                         to_ocr = recognition_preprocessing_1(plate_image)
-                        plate_text, ocr_confidence = ocr_plate1(to_ocr)
+                        plate_text, ocr_confidence = ocr_plate(to_ocr)
 
                     if ocr_confidence == 0:
                         ocr_confidence = scores[0].cpu().numpy()[0]
@@ -476,7 +586,7 @@ def get_plates_from_video(source):
                             line_thickness=3
                         )
 
-                    if save_image: cv2.imwrite(
+                    if config["save_image"]: cv2.imwrite(
                         "./image/img_recognized{idx}.jpeg".format(idx=idx),
                         frame
                         )

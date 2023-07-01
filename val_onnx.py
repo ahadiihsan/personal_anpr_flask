@@ -5,7 +5,7 @@ import os
 import time
 import easyocr
 import Levenshtein
-from app import save_image
+from app import config
 from app import plate_utils
 from app import utils
 import glob
@@ -13,57 +13,18 @@ from datetime import datetime
 import csv
 import onnxruntime
 from PIL import Image
+import pytesseract
 
+# setting up tesseract path
+pytesseract.pytesseract.tesseract_cmd = r'/opt/homebrew/Cellar/tesseract/5.3.1_1/bin/tesseract'
 
-def nms(boxes, scores, iou_threshold):
-    # Sort by score
-    sorted_indices = np.argsort(scores)[::-1]
+def ocr_plate3(plate_image):
 
-    keep_boxes = []
-    while sorted_indices.size > 0:
-        # Pick the last box
-        box_id = sorted_indices[0]
-        keep_boxes.append(box_id)
+    # recognizing text
+    config = '-l eng --oem 1 --psm 7'
+    text = pytesseract.image_to_string(plate_image, config=config)
 
-        # Compute IoU of the picked box with the rest
-        ious = compute_iou(boxes[box_id, :], boxes[sorted_indices[1:], :])
-
-        # Remove boxes with IoU over the threshold
-        keep_indices = np.where(ious < iou_threshold)[0]
-
-        # print(keep_indices.shape, sorted_indices.shape)
-        sorted_indices = sorted_indices[keep_indices + 1]
-
-    return keep_boxes[:1]
-
-def compute_iou(box, boxes):
-    # Compute xmin, ymin, xmax, ymax for both boxes
-    xmin = np.maximum(box[0], boxes[:, 0])
-    ymin = np.maximum(box[1], boxes[:, 1])
-    xmax = np.minimum(box[2], boxes[:, 2])
-    ymax = np.minimum(box[3], boxes[:, 3])
-
-    # Compute intersection area
-    intersection_area = np.maximum(0, xmax - xmin) * np.maximum(0, ymax - ymin)
-
-    # Compute union area
-    box_area = (box[2] - box[0]) * (box[3] - box[1])
-    boxes_area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
-    union_area = box_area + boxes_area - intersection_area
-
-    # Compute IoU
-    iou = intersection_area / union_area
-
-    return iou
-
-def xywh2xyxy(x):
-    # Convert bounding box (x, y, w, h) to bounding box (x1, y1, x2, y2)
-    y = np.copy(x)
-    y[..., 0] = x[..., 0] - x[..., 2] / 2
-    y[..., 1] = x[..., 1] - x[..., 3] / 2
-    y[..., 2] = x[..., 0] + x[..., 2] / 2
-    y[..., 3] = x[..., 1] + x[..., 3] / 2
-    return y
+    return text
 
 
 # Get all paths to your images files and text files
@@ -99,10 +60,25 @@ with open('result/val_onnx_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
             'filename',
             'ground_truth',
             'plate_text',
-            'similarity_score'
+            'similarity_score',
+            'elapsed_time_detection',
+            'elapsed_time_extraction',
+            'elapsed_time_preprocessing_1',
+            'elapsed_time_ocr_1',
+            'elapsed_time_preprocessing_2',
+            'elapsed_time_ocr_2',
+            'elapsed_time_per_frame'
         ])
     
     rows = []
+    
+    elapsed_time_detection = 0
+    elapsed_time_extraction = 0
+    elapsed_time_preprocessing_1 = 0
+    elapsed_time_ocr_1 = 0
+    elapsed_time_preprocessing_2 = 0
+    elapsed_time_ocr_2 = 0
+    elapsed_time_per_frame = 0
     
     # Initialize fps variables
     frame_count = 0
@@ -110,11 +86,13 @@ with open('result/val_onnx_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
     count = 0
 
     for path in paths:
+        start_time_frame = time.time()
         filename = os.path.splitext(os.path.basename(path))[0]
         ground_truth = filename.split('_')[1]
 
         image = cv2.imread(path)
         
+        start_time_detection = time.time()
         image_height, image_width = image.shape[:2]
         input_height, input_width = input_shape[2:]
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -146,20 +124,60 @@ with open('result/val_onnx_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
         boxes *= np.array([image_width, image_height, image_width, image_height])
         boxes = boxes.astype(np.int32)
         
-        indices = nms(boxes, scores, 0.7)
+        indices = utils.nms(boxes, scores, 0.7)
         
-        bbox = xywh2xyxy(boxes[indices]).round().astype(np.int32)
+        bbox = utils.xywh2xyxy(boxes[indices]).round().astype(np.int32)
+        
+        end_time_detection = time.time()
+        elapsed_time_detection = end_time_detection - start_time_detection
+        print(f"ELAPSED TIME PER DETECTION: {elapsed_time_detection}")
+        
         if len(bbox) == 0:
             continue
         
         for coords in bbox:
+            start_time_extraction = time.time()
             plate_image = plate_utils.extract_plate(image, coords)
+            end_time_extraction = time.time()
+            elapsed_time_extraction = end_time_extraction - start_time_extraction
+            print(f"ELAPSED TIME EXTRACT PLATE: {elapsed_time_extraction}")
+            # to_ocr = plate_image
+            
+            start_time_preprocessing_1 = time.time()
             to_ocr = plate_utils.recognition_preprocessing_2(plate_image)
-            plate_text, confidence = plate_utils.ocr_plate1(to_ocr)
-            if len(plate_text) <= 3:
-                to_ocr = plate_utils.recognition_preprocessing_1(plate_image)
-                plate_text, confidence = plate_utils.ocr_plate1(to_ocr)
+            end_time_preprocessing_1 = time.time()
+            elapsed_time_preprocessing_1 = end_time_preprocessing_1 - start_time_preprocessing_1
+            print(f"ELAPSED TIME PREPROCESSING 1: {elapsed_time_preprocessing_1}")
 
+            start_time_ocr_1 = time.time()
+            plate_text, confidence = plate_utils.ocr_plate1(to_ocr)
+            end_time_ocr_plate1 = time.time()
+            elapsed_time_ocr_1 = end_time_ocr_plate1 - start_time_ocr_1
+            print(f"ELAPSED TIME OCR 1: {elapsed_time_ocr_1}")
+            
+            # start_time_ocr_3 = time.time()
+            # plate_text = ocr_plate3(to_ocr)
+            # end_time_ocr_plate3 = time.time()
+            # elapsed_time_ocr_3 = end_time_ocr_plate3 - start_time_ocr_3
+            # print(f"ELAPSED TIME OCR 3: {elapsed_time_ocr_3}")
+            
+            if len(plate_text) <= 3:
+                start_time_preprocessing_2 = time.time()
+                to_ocr = plate_utils.recognition_preprocessing_1(plate_image)
+                end_time_preprocessing_2 = time.time()
+                elapsed_time_preprocessing_2 = end_time_preprocessing_2 - start_time_preprocessing_2
+                print(f"ELAPSED TIME PREPROCESSING 2: {elapsed_time_preprocessing_2}")
+
+                start_time_ocr_2 = time.time()
+                plate_text, confidence = plate_utils.ocr_plate1(to_ocr)
+                end_time_ocr_plate2 = time.time()
+                elapsed_time_ocr_2 = end_time_ocr_plate2 - start_time_ocr_2
+                print(f"ELAPSED TIME OCR 2: {elapsed_time_ocr_2}")
+
+        end_time_frame = time.time()
+        elapsed_time_per_frame = end_time_frame - start_time_frame
+        print(f"ELAPSED TIME PER FRAME: {elapsed_time_per_frame}")
+        
         if ground_truth == plate_text:
             count += 1
         
@@ -170,7 +188,14 @@ with open('result/val_onnx_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
             filename,
             ground_truth,
             plate_text,
-            utils.calculate_similarity(ground_truth, plate_text)
+            utils.calculate_similarity(ground_truth, plate_text),
+            elapsed_time_detection,
+            elapsed_time_extraction,
+            elapsed_time_preprocessing_1,
+            elapsed_time_ocr_1,
+            elapsed_time_preprocessing_2,
+            elapsed_time_ocr_2,
+            elapsed_time_per_frame
         ])
 
 

@@ -5,7 +5,7 @@ import os
 import time
 import easyocr
 import Levenshtein
-from app import save_image
+from app import config
 from app import plate_utils
 from app import utils
 import glob
@@ -14,7 +14,7 @@ import csv
 
 # Get all paths to your images files and text files
 PATH = 'datasets/'
-paths = glob.glob(PATH+'validation/plate/*')
+paths = glob.glob(PATH+'validation/plate/wrap-unwrap/*')
 
 with open('result/val_ocr_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
     # create the csv writer
@@ -34,7 +34,9 @@ with open('result/val_ocr_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
 
     for path in paths:
         filename = os.path.splitext(os.path.basename(path))[0]
-        ground_truth = filename
+        print(filename)
+        # ground_truth = filename
+        ground_truth = filename.split('_')[1]
 
         img = cv2.imread(path)
         plate_text, confidence = plate_utils.ocr_plate1(

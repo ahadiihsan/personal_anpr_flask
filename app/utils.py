@@ -10,7 +10,7 @@ from typing import Tuple, Union
 import math
 import imutils as im
 import Levenshtein
-from app import save_image
+from app import config
 
 # load denoiser model
 denoiser = load_model("./models/denoiser_ae2.h5")
@@ -89,7 +89,7 @@ def letterbox(
 
 def line_remover(plate):
     edges = cv2.Canny(plate, 50, 150, apertureSize=3)
-    if save_image: cv2.imwrite("./image/img_canny.jpeg", edges)
+    if config["save_image"]: cv2.imwrite("./image/img_canny.jpeg", edges)
     height, width = edges.shape[:2]
     edges = edges[0: int(height/2), 0:width]
     minLineLength = 0
@@ -134,13 +134,13 @@ def maximizeContrast(imgGrayscale):
         )
 
     imgGrayscalePlusTopHat = cv2.add(imgGrayscale, imgTopHat)
-    if save_image: cv2.imwrite(
+    if config["save_image"]: cv2.imwrite(
             "./image/img_imgGrayscalePlusTopHat.jpeg", imgGrayscalePlusTopHat
         )
     imgGrayscalePlusTopHatMinusBlackHat = cv2.subtract(
             imgGrayscalePlusTopHat, imgBlackHat
         )
-    if save_image: cv2.imwrite(
+    if config["save_image"]: cv2.imwrite(
             "./image/img_imgGrayscalePlusTopHatMinusBlackHat.jpeg",
             imgGrayscalePlusTopHatMinusBlackHat
         )
@@ -211,22 +211,22 @@ def find_line(lines):
 
 def rotate(image):
     edges = cv2.Canny(image, 50, 150)
-    if save_image: cv2.imwrite("./image/img_canned.jpeg", edges)
+    if config["save_image"]: cv2.imwrite("./image/img_canned.jpeg", edges)
     lines = cv2.HoughLinesP(
             edges, 1, math.pi / 180.0, 100, minLineLength=100, maxLineGap=3
         )
-    # if save_image: cv2.imwrite("./image/img_lines1.jpeg", lines)
+    # if config["save_image"]: cv2.imwrite("./image/img_lines1.jpeg", lines)
 
     if lines is None or is_horizontal(lines):
         lines = cv2.HoughLinesP(
                 edges, 1, np.pi/180, 70, minLineLength=70, maxLineGap=3
             )
-        # if save_image: cv2.imwrite("./image/img_lines2.jpeg", lines)
+        # if config["save_image"]: cv2.imwrite("./image/img_lines2.jpeg", lines)
         if lines is None or is_horizontal(lines):
             lines = cv2.HoughLinesP(
                     edges, 1, np.pi/180, 50, minLineLength=40, maxLineGap=3
                 )
-            # if save_image: cv2.imwrite("./image/img_lines3.jpeg", lines)
+            # if config["save_image"]: cv2.imwrite("./image/img_lines3.jpeg", lines)
 
     if lines is None:
         return image
@@ -411,3 +411,56 @@ def calculate_similarity(str1, str2):
     max_length = max(len(str1), len(str2))
     similarity = 1 - (distance / max_length)
     return similarity
+
+
+def nms(boxes, scores, iou_threshold):
+    # Sort by score
+    sorted_indices = np.argsort(scores)[::-1]
+
+    keep_boxes = []
+    while sorted_indices.size > 0:
+        # Pick the last box
+        box_id = sorted_indices[0]
+        keep_boxes.append(box_id)
+
+        # Compute IoU of the picked box with the rest
+        ious = compute_iou(boxes[box_id, :], boxes[sorted_indices[1:], :])
+
+        # Remove boxes with IoU over the threshold
+        keep_indices = np.where(ious < iou_threshold)[0]
+
+        # print(keep_indices.shape, sorted_indices.shape)
+        sorted_indices = sorted_indices[keep_indices + 1]
+
+    return keep_boxes[:1]
+
+
+def compute_iou(box, boxes):
+    # Compute xmin, ymin, xmax, ymax for both boxes
+    xmin = np.maximum(box[0], boxes[:, 0])
+    ymin = np.maximum(box[1], boxes[:, 1])
+    xmax = np.minimum(box[2], boxes[:, 2])
+    ymax = np.minimum(box[3], boxes[:, 3])
+
+    # Compute intersection area
+    intersection_area = np.maximum(0, xmax - xmin) * np.maximum(0, ymax - ymin)
+
+    # Compute union area
+    box_area = (box[2] - box[0]) * (box[3] - box[1])
+    boxes_area = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+    union_area = box_area + boxes_area - intersection_area
+
+    # Compute IoU
+    iou = intersection_area / union_area
+
+    return iou
+
+
+def xywh2xyxy(x):
+    # Convert bounding box (x, y, w, h) to bounding box (x1, y1, x2, y2)
+    y = np.copy(x)
+    y[..., 0] = x[..., 0] - x[..., 2] / 2
+    y[..., 1] = x[..., 1] - x[..., 3] / 2
+    y[..., 2] = x[..., 0] + x[..., 2] / 2
+    y[..., 3] = x[..., 1] + x[..., 3] / 2
+    return y

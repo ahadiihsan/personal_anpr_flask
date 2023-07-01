@@ -1,6 +1,6 @@
 import numpy as np
 import cv2
-from app import save_image
+from app import config
 
 SIZE_MULTIPLIER = 1
 PLATE_SIZE = (30 * SIZE_MULTIPLIER, 10 * SIZE_MULTIPLIER)
@@ -46,7 +46,7 @@ def top_hat(image):
     equ = cv2.equalizeHist(blur)
 
     tophat = cv2.morphologyEx(equ, cv2.MORPH_TOPHAT, kernel_tophat)
-    if save_image: cv2.imwrite("./image/img_top_hat1.jpeg", tophat)
+    if config["save_image"]: cv2.imwrite("./image/img_top_hat1.jpeg", tophat)
 
     # use OTSU's binarzation since we need to calculate local thresholds
     _, otsu = cv2.threshold(tophat, 0, 255, cv2.THRESH_BINARY+cv2.THRESH_OTSU)
@@ -54,6 +54,6 @@ def top_hat(image):
     close = cv2.morphologyEx(otsu, cv2.MORPH_CLOSE, kenel_close)
     open = cv2.morphologyEx(close, cv2.MORPH_OPEN, kernel_open)
 
-    if save_image: cv2.imwrite("./image/img_top_hat.jpeg", open)
+    if config["save_image"]: cv2.imwrite("./image/img_top_hat.jpeg", open)
 
     return open
