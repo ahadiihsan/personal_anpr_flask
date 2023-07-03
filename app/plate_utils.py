@@ -126,7 +126,7 @@ def detect_plate(source_image):
         return plate_detections, det_confidences
 
 
-def extract_plate(image, coord):
+def extract_plate(image, coord, save_path = './image/results/common/'):
     h, w, c = image.shape
     nx = 5
     ny = 5
@@ -142,26 +142,26 @@ def extract_plate(image, coord):
             x1:x2
         ]
 
-    if config["save_image"]: cv2.imwrite("./image/img_cropped.jpeg", cropped_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_cropped.jpeg", cropped_image)
 
     return cropped_image
 
 
-def recognition_preprocessing_1(input):
+def recognition_preprocessing_1(input, save_path = './image/results/common/'):
 
     plate_image = input
 
     plate_image = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
-    if config["save_image"]: cv2.imwrite("./image/img_grayscaled.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_grayscaled.jpeg", plate_image)
     
     plate_image = utils.rotate(plate_image)
-    if config["save_image"]: cv2.imwrite("./image/img_rotated.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_rotated.jpeg", plate_image)
 
     plate_image = utils.maximizeContrast(plate_image)
-    if config["save_image"]: cv2.imwrite("./image/img_contrast.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_contrast.jpeg", plate_image)
     
     plate_image = cv2.cvtColor(plate_image, cv2.COLOR_GRAY2BGR)
-    cv2.imwrite("./image/img_color.jpeg", plate_image)
+    cv2.imwrite(f"{save_path}/img_color.jpeg", plate_image)
 
     plate_image = cv2.resize(
                                 plate_image,
@@ -170,32 +170,32 @@ def recognition_preprocessing_1(input):
                                 fy=1,
                                 interpolation=cv2.INTER_CUBIC
                             )
-    if config["save_image"]: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_rescaled.jpeg", plate_image)
 
     return plate_image
 
 
-def recognition_preprocessing_2(input):
+def recognition_preprocessing_2(input, save_path = './image/results/common/'):
 
     kernel = np.ones((3, 3))
     plate_image = input
 
     plate_image = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
-    if config["save_image"]: cv2.imwrite("./image/warp/imgGray.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/imgGray.jpeg", plate_image)
 
     imgCanny = cv2.Canny(plate_image, 50, 200, apertureSize=5)
-    if config["save_image"]: cv2.imwrite("./image/warp/imgCanny.jpeg", imgCanny)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/imgCanny.jpeg", imgCanny)
 
     imgDilate = cv2.dilate(imgCanny, kernel, iterations=2)
-    if config["save_image"]: cv2.imwrite("./image/warp/imgDilate.jpeg", imgDilate)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/imgDilate.jpeg", imgDilate)
 
     imgThres = cv2.erode(imgDilate, kernel, iterations=2)
-    if config["save_image"]: cv2.imwrite("./image/warp/imgThres.jpeg", imgThres)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/imgThres.jpeg", imgThres)
 
     biggest, imgContour, warped = utils.getContours(imgThres, input)
 
-    if config["save_image"]: cv2.imwrite("./image/warp/imgContour.jpeg", imgContour)
-    if config["save_image"]: cv2.imwrite("./image/img_warped.jpeg", warped)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/imgContour.jpeg", imgContour)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_warped.jpeg", warped)
 
     plate_image = warped
 
@@ -206,10 +206,10 @@ def recognition_preprocessing_2(input):
                                 fy=1,
                                 interpolation=cv2.INTER_CUBIC
                             )
-    if config["save_image"]: cv2.imwrite("./image/img_rescaled.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_rescaled.jpeg", plate_image)
     
     plate_image = cv2.bitwise_not(plate_image)
-    if config["save_image"]: cv2.imwrite("./image/img_not.jpeg", plate_image)
+    if config["save_image"]: cv2.imwrite(f"{save_path}/img_not.jpeg", plate_image)
     
     # titles = ['Original', 'Canny', 'Dilate', 'Threshold', 'Contours', 'Warped']  # Change - also show warped image
     # images = [input[...,::-1], imgCanny, imgDilate, imgThres, imgContour, warped]  # Change
@@ -436,14 +436,29 @@ def get_plates_from_image(input, filename="", directory=""):
     ocr_confidences = []
     plate_text = ''
     detected_image = deepcopy(input)
+    
+    if config["save_image"]:
+        if filename != "":
+            if directory != "":
+                save_path = './image/results/{directory}/{filename}/'.format(
+                        directory=directory,
+                        filename=filename
+                        )
+            else:
+                save_path = './image/result/{filename}/'.format(
+                        filename=filename
+                        )
+                
+        if not os.path.exists(save_path):
+            os.mkdir(save_path)
 
     for coords in plate_detections:
-        plate_image = extract_plate(input, coords)
+        plate_image = extract_plate(input, coords, save_path)
         
-        to_ocr = recognition_preprocessing_2(plate_image)
+        to_ocr = recognition_preprocessing_2(plate_image, save_path)
         plate_text, ocr_confidence = ocr_plate(to_ocr)
         if len(plate_text) <= 3:
-            to_ocr = recognition_preprocessing_1(plate_image)
+            to_ocr = recognition_preprocessing_1(plate_image, save_path)
             plate_text, ocr_confidence = ocr_plate(to_ocr)
 
         plate_texts.append(plate_text)
@@ -457,44 +472,30 @@ def get_plates_from_image(input, filename="", directory=""):
                 line_thickness=2
             )
 
-        if filename != "":
-            if directory != "":
-                path = './image/results/{directory}/{filename}/'.format(
-                        directory=directory,
-                        filename=filename
-                        )
-            else:
-                path = './image/result/{filename}/'.format(
-                        filename=filename
-                        )
+        if config["save_image"]: cv2.imwrite(
+            "{path}{idx}.jpeg".format(
+                path=save_path,
+                idx=filename.split("_")[1]
+                ),
+            detected_image
+        )
 
-            if not os.path.exists(path):
-                os.mkdir(path)
+        if config["save_image"]: cv2.imwrite(
+            "{path}img_cropped_{plate}.jpeg".format(
+                    path=save_path,
+                    plate=plate_text
+                ),
+            plate_image
+        )
+        if config["save_image"]: cv2.imwrite(
+            "{path}img_to_ocr_{plate}.jpeg".format(
+                    path=save_path,
+                    plate=plate_text
+                ),
+            to_ocr
+        )
 
-            if config["save_image"]: cv2.imwrite(
-                "{path}{idx}.jpeg".format(
-                    path=path,
-                    idx=filename.split("_")[1]
-                    ),
-                detected_image
-            )
-
-            if config["save_image"]: cv2.imwrite(
-                "{path}img_cropped_{plate}.jpeg".format(
-                        path=path,
-                        plate=plate_text
-                    ),
-                plate_image
-            )
-            if config["save_image"]: cv2.imwrite(
-                "{path}img_to_ocr_{plate}.jpeg".format(
-                        path=path,
-                        plate=plate_text
-                    ),
-                to_ocr
-            )
-
-        if config["save_image"]: cv2.imwrite("./image/img_recognized.jpeg", detected_image)
+        if config["save_image"]: cv2.imwrite(f"{save_path}/img_recognized.jpeg", detected_image)
 
     return detected_image, plate_text
 
