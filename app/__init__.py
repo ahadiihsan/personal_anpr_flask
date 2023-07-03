@@ -2,7 +2,7 @@ from flask import Flask
 
 app = Flask(__name__)
 config = {
-  "save_image": True,
+  "save_image": False,
   "onnx": True,
   "ocr": "keras",
 }
