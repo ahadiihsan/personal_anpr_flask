@@ -11,8 +11,9 @@ import time
 # Get all paths to your images files and text files
 PATH = 'datasets/'
 
-paths = glob.glob(PATH+'validation/images/*')
+paths = glob.glob(PATH+'validation/validation-set/images/*')
 
+# paths = glob.glob(r'/Users/ahadiihsanrasyidin/Projects/final-project/PrototypeV8/data_preparation/validation_set/renamed/images/*')
 ground_truths = []
 results = []
 count = 0
@@ -32,7 +33,12 @@ with open('result/val_{dt}.csv'.format(dt=dt), 'w') as fp:
     # Initialize fps variables
     frame_count = 0
     start_time = time.time()
-
+    directory = dt.strftime('%s')
+    
+    os.mkdir('./image/results/{directory}'.format(directory=directory))
+    os.mkdir('./image/results/{directory}/true'.format(directory=directory))
+    os.mkdir('./image/results/{directory}/false'.format(directory=directory))
+    
     for path in paths:
         filename = os.path.splitext(os.path.basename(path))[0]
         ground_truth = filename.split('_')[1]
@@ -41,13 +47,29 @@ with open('result/val_{dt}.csv'.format(dt=dt), 'w') as fp:
         img = cv2.imread(path)
         detected_image, plate_text = plate_utils.get_plates_from_image(
                 img,
-                filename
+                filename,
+                directory
             )
 
         results.append(plate_text)
 
         if ground_truth == plate_text:
             count += 1
+            cv2.imwrite(
+                "./image/results/{directory}/true/{filename}.jpeg".format(
+                        directory=directory,
+                        filename=filename
+                    ),
+                img
+            )
+        else:
+            cv2.imwrite(
+                "./image/results/{directory}/false/{filename}.jpeg".format(
+                        directory=directory,
+                        filename=filename
+                    ),
+                img
+            )
         
         frame_count += 1
 

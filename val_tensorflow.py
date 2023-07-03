@@ -19,28 +19,8 @@ from PIL import Image
 PATH = 'datasets/'
 paths = glob.glob(PATH+'validation/validation-set/images/*')
 
-opt_session = onnxruntime.SessionOptions()
-opt_session.enable_mem_pattern = False
-opt_session.enable_cpu_mem_arena = True
-opt_session.graph_optimization_level = onnxruntime.GraphOptimizationLevel.ORT_DISABLE_ALL
 
-model_path = 'result/train/weights/best.onnx'
-EP_list = ['CPUExecutionProvider']
-CLASSES = [
-	'license_plate'
-]
-
-ort_session = onnxruntime.InferenceSession(model_path, providers=EP_list)
-
-model_inputs = ort_session.get_inputs()
-input_names = [model_inputs[i].name for i in range(len(model_inputs))]
-input_shape = model_inputs[0].shape
-
-model_output = ort_session.get_outputs()
-output_names = [model_output[i].name for i in range(len(model_output))]
-
-
-with open('result/val_onnx_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
+with open('result/val_tensorflow_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
     # create the csv writer
     writer = csv.writer(fp)
     # header
@@ -81,41 +61,7 @@ with open('result/val_onnx_{dt}.csv'.format(dt=datetime.now()), 'w') as fp:
         image = cv2.imread(path)
         
         start_time_detection = time.time()
-        image_height, image_width = image.shape[:2]
-        input_height, input_width = input_shape[2:]
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        resized = cv2.resize(image_rgb, (input_width, input_height))
-
-        # Scale input pixel value to 0 to 1
-        input_image = resized / 255.0
-        input_image = input_image.transpose(2,0,1)
-        input_tensor = input_image[np.newaxis, :, :, :].astype(np.float32)
-
-        outputs = ort_session.run(output_names, {input_names[0]: input_tensor})[0]
-        predictions = np.squeeze(outputs).T
-        
-        conf_thresold = 0.7
-        # Filter out object confidence scores below threshold
-        scores = np.max(predictions[:, 4:], axis=1)
-        predictions = predictions[scores > conf_thresold, :]
-        scores = scores[scores > conf_thresold]
-        
-        # Get the class with the highest confidence
-        class_ids = np.argmax(predictions[:, 4:], axis=1)
-        
-        # Get bounding boxes for each object
-        boxes = predictions[:, :4]
-
-        #rescale box
-        input_shape = np.array([input_width, input_height, input_width, input_height])
-        boxes = np.divide(boxes, input_shape, dtype=np.float32)
-        boxes *= np.array([image_width, image_height, image_width, image_height])
-        boxes = boxes.astype(np.int32)
-        
-        indices = utils.nms(boxes, scores, 0.7)
-        
-        bbox = utils.xywh2xyxy(boxes[indices]).round().astype(np.int32)
-        
+        bbox, det_confidences = plate_utils.detect_plate(image)
         end_time_detection = time.time()
         elapsed_time_detection = end_time_detection - start_time_detection
         print(f"ELAPSED TIME PER DETECTION: {elapsed_time_detection}")

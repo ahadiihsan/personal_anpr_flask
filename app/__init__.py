@@ -4,7 +4,7 @@ app = Flask(__name__)
 config = {
   "save_image": True,
   "onnx": True,
-  "ocr": "easy",
+  "ocr": "keras",
 }
 
 

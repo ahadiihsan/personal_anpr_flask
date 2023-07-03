@@ -19,7 +19,8 @@ for path in paths:
     img = cv2.imread(path)
     detected_image, plate_text = plate_utils.get_plates_from_image(
             img,
-            ""
+            "",
+            "",
         )
 
     if config["save_image"]: cv2.imwrite(

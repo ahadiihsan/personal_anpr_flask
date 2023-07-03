@@ -6,9 +6,9 @@ import csv
 
 dt = datetime.now()
 
-# source = 'datasets/example/Demo Toll Gate License Plate Recognition.mp4'
-# print("file exists?", os.path.exists(source))
-source = 0
+source = '../../13518006/TA/ANPR/examples/test_video_1.mp4'
+print("file exists?", os.path.exists(source))
+# source = 0
 
 with open('result/val_video_{dt}.csv'.format(dt=dt), 'w') as fp:
     # create the csv writer

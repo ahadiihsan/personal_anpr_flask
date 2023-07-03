@@ -17,6 +17,8 @@ from matplotlib import pyplot as plt
 import onnxruntime
 from PIL import Image
 import pytesseract
+from datetime import datetime
+import re
 
 # Load detection model
 if config["onnx"]:
@@ -118,7 +120,7 @@ def detect_plate(source_image):
                             ).tolist()[0]
                         ]
                     plate_detections.append(coords)
-                    det_confidences.append(box.conf)
+                    det_confidences.append(box.conf.cpu().numpy()[0])
                     print(f"DET CONFIDENCE: {box.conf}")
 
         return plate_detections, det_confidences
@@ -126,16 +128,18 @@ def detect_plate(source_image):
 
 def extract_plate(image, coord):
     h, w, c = image.shape
+    nx = 5
+    ny = 5
     # minus
-    x1 = int(coord[1])-5 if int(coord[1])-5 >= 0 else int(coord[1])
-    y1 = int(coord[0])-5 if int(coord[0])-5 >= 0 else int(coord[0])
+    y1 = int(coord[1])-ny if int(coord[1])-ny >= 0 else int(coord[1])
+    x1 = int(coord[0])-nx if int(coord[0])-nx >= 0 else int(coord[0])
     # plus
-    x2 = int(coord[3])+5 if int(coord[3])+5 <= w else int(coord[3])
-    y2 = int(coord[2])+5 if int(coord[2])+5 <= h else int(coord[2])
+    y2 = int(coord[3])+ny if int(coord[3])+ny <= h else int(coord[3])
+    x2 = int(coord[2])+nx if int(coord[2])+nx <= w else int(coord[2])
 
     cropped_image = image[
-            x1:x2,
-            y1:y2
+            y1:y2,
+            x1:x2
         ]
 
     if config["save_image"]: cv2.imwrite("./image/img_cropped.jpeg", cropped_image)
@@ -179,7 +183,7 @@ def recognition_preprocessing_2(input):
     plate_image = cv2.cvtColor(plate_image, cv2.COLOR_BGR2GRAY)
     if config["save_image"]: cv2.imwrite("./image/warp/imgGray.jpeg", plate_image)
 
-    imgCanny = cv2.Canny(plate_image, 150, 200)
+    imgCanny = cv2.Canny(plate_image, 50, 200, apertureSize=5)
     if config["save_image"]: cv2.imwrite("./image/warp/imgCanny.jpeg", imgCanny)
 
     imgDilate = cv2.dilate(imgCanny, kernel, iterations=2)
@@ -333,7 +337,9 @@ def ocr_plate3(plate_image):
     # recognizing text
     config = '-l eng --oem 1 --psm 7'
     results = pytesseract.image_to_data(plate_image, config=config, output_type=pytesseract.Output.DICT)
+    min_conf = 0.7
     all_text = ""
+    total_conf = 0
     for i in range(0, len(results["text"])):
         x = results["left"][i]
         y = results["top"][i]
@@ -341,11 +347,15 @@ def ocr_plate3(plate_image):
         h = results["height"][i]
         text = results["text"][i]
         conf = int(results["conf"][i])
-        all_text += text
-
+        
+        if conf > min_conf:
+            for token in text:
+                if bool(re.match("^[A-Z0-9]*$", token)):
+                    all_text += token
+            total_conf += conf
+        
     print(f"OCR RESULT: {all_text}")
-    return all_text, conf
-
+    return all_text, total_conf
 
 def ocr_plate(plate_image):
     if config["ocr"] == "tesseract":
@@ -353,15 +363,24 @@ def ocr_plate(plate_image):
     elif config["ocr"] == "keras":
         return ocr_plate1(plate_image)
     else:
-        return ovr_plate2(plate_image)
+        return ocr_plate2(plate_image)
 
 
 def get_best_ocr1(preds, rec_conf, ocr_res, track_id):
     for info in preds:
         # Check if it is current track id
+        length = max(len(info['ocr_txt']), len(ocr_res))
         if info['track_id'] == track_id:
             # Check if the ocr confidenence is maximum or not
-            if info['ocr_conf'] < rec_conf:
+            existing_conf = 0
+            new_conf = 0
+            if length != 0:
+                if info['ocr_conf'] != 0:
+                    existing_conf = info['ocr_conf']/length
+                if rec_conf != 0:
+                    new_conf = rec_conf/length 
+                
+            if existing_conf < new_conf:
                 info['ocr_conf'] = rec_conf
                 info['ocr_txt'] = ocr_res
             else:
@@ -406,7 +425,7 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=3):
             )
 
 
-def get_plates_from_image(input, filename=""):
+def get_plates_from_image(input, filename="", directory=""):
 
     if input is None:
         return None
@@ -439,7 +458,15 @@ def get_plates_from_image(input, filename=""):
             )
 
         if filename != "":
-            path = './image/results/'+filename+'/'
+            if directory != "":
+                path = './image/results/{directory}/{filename}/'.format(
+                        directory=directory,
+                        filename=filename
+                        )
+            else:
+                path = './image/result/{filename}/'.format(
+                        filename=filename
+                        )
 
             if not os.path.exists(path):
                 os.mkdir(path)
@@ -533,7 +560,7 @@ def get_plates_from_video(source):
                             bbox[i] = 0
                     
                     # only consider bboxes that are on the detection range
-                    if bbox[0] < 100 or bbox[2] > 1200 or bbox[1] < 300 or bbox[3] > 500:
+                    if bbox[0] < 100 or bbox[2] > 1200 or bbox[1] < 400 or bbox[3] > 600:
                         continue
                     
                     # Cropping the license plate and applying the OCR.
@@ -547,7 +574,7 @@ def get_plates_from_video(source):
                         plate_text, ocr_confidence = ocr_plate(to_ocr)
 
                     if ocr_confidence == 0:
-                        ocr_confidence = scores[0].cpu().numpy()[0]
+                        ocr_confidence = scores[0]
                     # Storing the ocr output for corresponding track id.
                     output_frame = {
                         'track_id': track.track_id,
@@ -566,7 +593,7 @@ def get_plates_from_video(source):
                         save_count = 0
                     else:
                         save_count +=1
-                        preds, ocr_confidence, plate_text = get_best_ocr2(
+                        preds, ocr_confidence, plate_text = get_best_ocr1(
                                 preds,
                                 ocr_confidence,
                                 plate_text,
@@ -595,7 +622,7 @@ def get_plates_from_video(source):
             frame_count += 1
             
             plot_one_box(
-                            [100,300,1200,500],
+                            [100,400,1200,600],
                             frame,
                             label="",
                             color=[255, 150, 0],

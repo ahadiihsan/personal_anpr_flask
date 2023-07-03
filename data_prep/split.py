@@ -1,23 +1,26 @@
 import glob
-# import random
 import os
-import csv
-# import shutil
+import shutil
 
 # Get all paths to your images files and text files
-PATH = '../../datasets'
+PATH = '../datasets/validation/validation-set'
 # img_paths = glob.glob(PATH+'labeled_images/images/*.jpg')
 # txt_paths = glob.glob(PATH+'labeled_images/labels/*.txt')
 
-paths = glob.glob(PATH+'/res_path_v2/*')
+paths = glob.glob(PATH+'/images/*')
 
-with open('res_path_v.csv', 'w') as fp:
-    for path in paths:
-        # filename = os.path.splitext(os.path.basename(path))[0]
-        filename = os.path.splitext(os.path.basename(path))[0]
+idx = 1
+for path in paths:
+    # filename = os.path.splitext(os.path.basename(path))[0]
+    old_filename = os.path.splitext(os.path.basename(path))[0]
+    filename = old_filename.split('_')[1]
 
-        # create the csv writer
-        writer = csv.writer(fp)
-
-        # write a row to the csv file
-        writer.writerow(filename.split())
+    src_txt_path = (PATH+'/labels/'+old_filename+'.txt')
+    src_img_path = (PATH+'/images/'+old_filename+'.jpeg')
+    
+    dst_txt_path = (PATH+'/fix/labels/{idx}_{filename}.txt'.format(idx=idx, filename=filename))
+    dst_img_path = (PATH+'/fix/images/{idx}_{filename}.jpeg'.format(idx=idx, filename=filename))
+    idx += 1
+    
+    shutil.copy(src_img_path, dst_img_path)
+    shutil.copy(src_txt_path, dst_txt_path)
