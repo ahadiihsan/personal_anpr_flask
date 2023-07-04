@@ -25,6 +25,7 @@ with open('result/val_tensorflow_{dt}.csv'.format(dt=datetime.now()), 'w') as fp
     writer = csv.writer(fp)
     # header
     writer.writerow([
+            'no',
             'filename',
             'ground_truth',
             'plate_text',
@@ -57,6 +58,7 @@ with open('result/val_tensorflow_{dt}.csv'.format(dt=datetime.now()), 'w') as fp
         start_time_frame = time.time()
         filename = os.path.splitext(os.path.basename(path))[0]
         ground_truth = filename.split('_')[1]
+        no = filename.split('_')[0]
 
         image = cv2.imread(path)
         
@@ -89,18 +91,18 @@ with open('result/val_tensorflow_{dt}.csv'.format(dt=datetime.now()), 'w') as fp
             elapsed_time_ocr_1 = end_time_ocr_plate1 - start_time_ocr_1
             print(f"ELAPSED TIME OCR 1: {elapsed_time_ocr_1}")
             
-            if len(plate_text) <= 3:
-                start_time_preprocessing_2 = time.time()
-                to_ocr = plate_utils.recognition_preprocessing_1(plate_image)
-                end_time_preprocessing_2 = time.time()
-                elapsed_time_preprocessing_2 = end_time_preprocessing_2 - start_time_preprocessing_2
-                print(f"ELAPSED TIME PREPROCESSING 2: {elapsed_time_preprocessing_2}")
+            # if len(plate_text) <= 3:
+            #     start_time_preprocessing_2 = time.time()
+            #     to_ocr = plate_utils.recognition_preprocessing_1(plate_image)
+            #     end_time_preprocessing_2 = time.time()
+            #     elapsed_time_preprocessing_2 = end_time_preprocessing_2 - start_time_preprocessing_2
+            #     print(f"ELAPSED TIME PREPROCESSING 2: {elapsed_time_preprocessing_2}")
 
-                start_time_ocr_2 = time.time()
-                plate_text, confidence = plate_utils.ocr_plate(to_ocr)
-                end_time_ocr_plate2 = time.time()
-                elapsed_time_ocr_2 = end_time_ocr_plate2 - start_time_ocr_2
-                print(f"ELAPSED TIME OCR 2: {elapsed_time_ocr_2}")
+            #     start_time_ocr_2 = time.time()
+            #     plate_text, confidence = plate_utils.ocr_plate(to_ocr)
+            #     end_time_ocr_plate2 = time.time()
+            #     elapsed_time_ocr_2 = end_time_ocr_plate2 - start_time_ocr_2
+            #     print(f"ELAPSED TIME OCR 2: {elapsed_time_ocr_2}")
 
         end_time_frame = time.time()
         elapsed_time_per_frame = end_time_frame - start_time_frame
@@ -113,6 +115,7 @@ with open('result/val_tensorflow_{dt}.csv'.format(dt=datetime.now()), 'w') as fp
 
         # write a row to the csv file
         rows.append([
+            no,
             filename,
             ground_truth,
             plate_text,

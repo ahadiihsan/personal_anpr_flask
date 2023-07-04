@@ -2,9 +2,9 @@ from flask import Flask
 
 app = Flask(__name__)
 config = {
-  "save_image": False,
+  "save_image": True,
   "onnx": True,
-  "ocr": "keras",
+  "ocr": "tesseract",
 }
 
 
