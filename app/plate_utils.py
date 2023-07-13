@@ -436,7 +436,7 @@ def get_plates_from_image(input, filename="", directory=""):
     ocr_confidences = []
     plate_text = ''
     detected_image = deepcopy(input)
-    save_path = ""
+    save_path = "./image/results/common/"
     if config["save_image"]:
         if filename != "":
             if directory != "":
