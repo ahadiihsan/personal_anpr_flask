@@ -6,7 +6,7 @@ import csv
 
 dt = datetime.now()
 
-source = '../../13518006/TA/ANPR/examples/test_video_1.mp4'
+source = 'datasets/example/1689101739608727.mp4'
 print("file exists?", os.path.exists(source))
 # source = 0
 

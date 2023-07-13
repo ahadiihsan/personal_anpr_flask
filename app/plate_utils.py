@@ -561,7 +561,7 @@ def get_plates_from_video(source):
                             bbox[i] = 0
                     
                     # only consider bboxes that are on the detection range
-                    if bbox[0] < 100 or bbox[2] > 1200 or bbox[1] < 400 or bbox[3] > 600:
+                    if bbox[0] < 300 or bbox[2] > 1000 or bbox[1] < 400 or bbox[3] > 600:
                         continue
                     
                     # Cropping the license plate and applying the OCR.
@@ -623,7 +623,7 @@ def get_plates_from_video(source):
             frame_count += 1
             
             plot_one_box(
-                            [100,400,1200,600],
+                            [300,400,1000,600],
                             frame,
                             label="",
                             color=[255, 150, 0],
