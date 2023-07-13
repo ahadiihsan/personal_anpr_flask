@@ -475,7 +475,7 @@ def get_plates_from_image(input, filename="", directory=""):
         if config["save_image"]: cv2.imwrite(
             "{path}{idx}.jpeg".format(
                 path=save_path,
-                idx=filename.split("_")[1]
+                idx=filename.split("_")[1] if filename != "" else plate_text
                 ),
             detected_image
         )
