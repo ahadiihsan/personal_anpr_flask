@@ -24,13 +24,13 @@ python3 run.py
 
 ## REST API
 
-There are two available API-s defined in the web service - one for detecting licence plates from the image, and the other for checking if given licence plate is detected.
+There are two available API-s defined in the web service - one for detecting license plates from the image, and the other for checking if given license plate is detected.
 
-### Detecting licence plate from image
+### Detecting license plate from image
 
-Web service can detect licence plate from all cameras that have the ability to save images in JPG or PNG format. Testing the service could also be done using Postman or a similar program with example images from the Internet. Images like this one below will work without any problems and licence plate will be extracted from the image (licence plate on given image is blurred because this is a live image captured from the security camera).
+Web service can detect license plate from all cameras that have the ability to save images in JPG or PNG format. Testing the service could also be done using Postman or a similar program with example images from the Internet. Images like this one below will work without any problems and license plate will be extracted from the image (license plate on given image is blurred because this is a live image captured from the security camera).
 
-<p align="center"><img src="https://github.com/SanjinKurelic/FlaskALPR/blob/master/media/licencePlate.jpg" alt="Licence plate example image"/></p>
+<p align="center"><img src="https://github.com/SanjinKurelic/FlaskALPR/blob/master/media/LicencePlate.jpg" alt="License plate example image"/></p>
 
 #### Request
 
@@ -44,46 +44,46 @@ Content-Type: image/jpeg
 
 #### Repsponse
 
-If licence plate is detected:
+If license plate is detected:
 
 Status code - 200 OK
 
 ```json
 {
-  "message": "Licence plate AB1234CD found",
+  "message": "License plate AB1234CD found",
   "status": 200
 }
 ```
 
-If licence plate is not detected:
+If license plate is not detected:
 
 Status code - 200 OK
 
 ```json
 {
-  "message": "No licence plate found",
+  "message": "No license plate found",
   "status": 404
 }
 ```
 
-### Checking if licence plate is detected
+### Checking if license plate is detected
 
-For checking if given licence plate is detected from last time check was made `GET` request can be sent to `check-licence-plate` URL with two variables: 
+For checking if given license plate is detected from last time check was made `GET` request can be sent to `check-license-plate` URL with two variables: 
 
-- licence plate or comma separated licence plates that we need to check, for example: `AB1234AB`, or `AB1234AB,CD567EF,GH888II`
+- license plate or comma separated license plates that we need to check, for example: `AB1234AB`, or `AB1234AB,CD567EF,GH888II`
 - ISO datetime from the last check, for example: `2020-12-01T19:15:00`
   
-The service will check if licence plate is detected in the interval from given datetime and current datetime. If licence plate is detected the time of detection will be filled.
+The service will check if license plate is detected in the interval from given datetime and current datetime. If license plate is detected the time of detection will be filled.
 
 #### Request
 
 ```
-GET /check-licence-plate/<licence plate>/<iso datetime>
+GET /check-license-plate/<license plate>/<iso datetime>
 ```
 
 #### Response
 
-If licence plates are detected:
+If license plates are detected:
 
 Status code - 200 OK
 
@@ -97,7 +97,7 @@ Status code - 200 OK
 ]
 ```
 
-If licence plates are not detected:
+If license plates are not detected:
 
 Status code - 200 OK
 

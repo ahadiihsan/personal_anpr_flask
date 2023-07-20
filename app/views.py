@@ -27,16 +27,16 @@ def upload_camera_image():
 
     plate = services.parse_image(image.read())
     if plate is None:
-        return jsonify({"message": "No licence plate found", "status": 404})
+        return jsonify({"message": "No license plate found", "status": 404})
     else:
-        services.save_licence_plate(plate)
+        services.save_license_plate(plate)
         return jsonify(
-                {"message": f"Licence plate '{plate}' found", "status": 200}
+                {"message": f"License plate '{plate}' found", "status": 200}
             )
 
 
-@app.route("/check-licence-plate/<licence_plates>/<date>", methods=["GET"])
-def upload_image(licence_plates, date):
-    licence_plates = licence_plates.split(',')
+@app.route("/check-license-plate/<license_plates>/<date>", methods=["GET"])
+def upload_image(license_plates, date):
+    license_plates = license_plates.split(',')
     date = utils.convert_iso_to_timestamp(date)
-    return jsonify(services.contains_licence_plates(licence_plates, date))
+    return jsonify(services.contains_license_plates(license_plates, date))
